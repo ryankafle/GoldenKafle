@@ -10,9 +10,11 @@
 
 //--- Additional deployment inputs (not in Inputs.mqh) --------------
 input group "=== Symbol Selection ==="
-input bool   InpEnableEURUSD  = false;  // Enable EURUSD as secondary instrument
+input string InpPrimarySymbol   = "";        // Primary symbol (blank = current chart symbol)
+input bool   InpEnableEURUSD    = false;     // Enable secondary instrument
+input string InpSecondarySymbol = "EURUSD";  // Secondary symbol name (broker-exact)
 input group "=== Manual Overrides ==="
-input bool   InpResetPause    = false;  // Set true to clear PAUSED_REVIEW state on next init
+input bool   InpResetPause      = false;     // Set true to clear PAUSED_REVIEW state on next init
 
 //--- Module includes -----------------------------------------------
 #include "Config/Inputs.mqh"
@@ -33,9 +35,11 @@ CTradeManager g_tradeMgr;
 //--- Runtime state -------------------------------------------------
 datetime g_lastBarTime = 0;   // last processed M15 bar timestamp
 
-//--- Fixed symbol identifiers -------------------------------------
-const string SYM_XAU = "XAUUSD";
-const string SYM_EUR = "EURUSD";
+//--- Resolved symbol identifiers (set in OnInit) ------------------
+//  SYM_XAU defaults to the chart/tester symbol so the EA always uses
+//  the broker's exact gold symbol name (XAUUSD, XAUUSD.m, GOLD, ...).
+string SYM_XAU = "XAUUSD";   // primary   — resolved in OnInit
+string SYM_EUR = "EURUSD";   // secondary — resolved in OnInit
 
 //+==================================================================+
 //  HELPERS
@@ -167,6 +171,27 @@ bool GetOpeningDealInfo(ulong positionId,
 //+==================================================================+
 int OnInit() {
     ResetLastError();
+
+    // ---- Resolve trading symbols ---------------------------------
+    //  Primary defaults to the chart/tester symbol unless an explicit
+    //  name is given. This avoids "unknown symbol" indicator failures
+    //  when the broker's gold symbol is not literally "XAUUSD".
+    SYM_XAU = (StringLen(InpPrimarySymbol) > 0) ? InpPrimarySymbol : _Symbol;
+    SYM_EUR = InpSecondarySymbol;
+
+    // Ensure symbols are selected in Market Watch before handle creation
+    if (!SymbolSelect(SYM_XAU, true)) {
+        PrintFormat("GoldenKafle::OnInit: cannot select primary symbol '%s' (err %d).",
+                    SYM_XAU, GetLastError());
+        return INIT_FAILED;
+    }
+    if (InpEnableEURUSD && !SymbolSelect(SYM_EUR, true)) {
+        PrintFormat("GoldenKafle::OnInit: cannot select secondary symbol '%s' (err %d).",
+                    SYM_EUR, GetLastError());
+        return INIT_FAILED;
+    }
+    PrintFormat("GoldenKafle::OnInit: symbols resolved — primary='%s'  secondary='%s' (%s)",
+                SYM_XAU, SYM_EUR, InpEnableEURUSD ? "enabled" : "disabled");
 
     // M5 — Utilities (logging infrastructure needed by all modules)
     if (!g_utils.Init()) {

@@ -106,6 +106,14 @@ CSignalEngine::CSignalEngine()
 bool CSignalEngine::Init(string symbol) {
     m_symbol = symbol;
 
+    // Verify the symbol exists and is selectable before creating handles.
+    if (!SymbolSelect(symbol, true)) {
+        PrintFormat("CSignalEngine::Init [%s]: unknown / unselectable symbol (err %d). "
+                    "Check the broker's exact symbol name.",
+                    symbol, GetLastError());
+        return false;
+    }
+
     m_hEMAFast = iMA(symbol, PERIOD_H1, InpEMAFast, 0, MODE_EMA, PRICE_CLOSE);
     m_hEMASlow = iMA(symbol, PERIOD_H1, InpEMASlow, 0, MODE_EMA, PRICE_CLOSE);
     m_hADX     = iADX(symbol, PERIOD_H1, InpADXPeriod);
